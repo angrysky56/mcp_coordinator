@@ -19,10 +19,7 @@ from typing import Any
 try:
     from smolagents import LocalPythonExecutor
 except ImportError:
-    raise ImportError(
-        "smolagents is required for secure execution. "
-        "Install with: uv pip install smolagents"
-    )
+    raise ImportError("smolagents is required for secure execution. Install with: uv pip install smolagents")
 
 
 def set_limits(max_cpu_time: int, max_memory: int) -> None:
@@ -68,18 +65,34 @@ class SecureExecutor:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
 
         self.allowed_imports = allowed_imports or [
-            "mcp_tools", "skills", "json", "csv", "datetime", "math",
-            "statistics", "collections", "itertools", "functools", "pathlib", "typing",
+            "mcp_tools",
+            "skills",
+            "json",
+            "csv",
+            "datetime",
+            "math",
+            "statistics",
+            "collections",
+            "itertools",
+            "functools",
+            "pathlib",
+            "typing",
         ]
         self.denied_imports = denied_imports or [
-            "os", "subprocess", "sys", "eval", "exec", "compile", "__import__",
+            "os",
+            "subprocess",
+            "sys",
+            "eval",
+            "exec",
+            "compile",
+            "__import__",
         ]
         self.max_execution_time = max_execution_time
         self.network_isolation = network_isolation
         self.max_cpu_time = max_cpu_time
         self.max_memory = max_memory
-        self.executor = LocalPythonExecutor()
         self._setup_import_paths()
+        self.executor = LocalPythonExecutor(additional_authorized_imports=self.allowed_imports)
 
     def _setup_import_paths(self) -> None:
         """Add necessary paths to Python import system."""
@@ -91,12 +104,10 @@ class SecureExecutor:
 
     async def _execute_isolated(self, code: str) -> dict[str, Any]:
         """Execute code in a network-isolated environment."""
-        encoded_code = base64.b64encode(code.encode('utf-8')).decode('utf-8')
+        encoded_code = base64.b64encode(code.encode("utf-8")).decode("utf-8")
         helper_path = Path(__file__).parent / "_executor_helper.py"
 
-        cmd = [
-            "unshare", "--net", sys.executable, str(helper_path), encoded_code
-        ]
+        cmd = ["unshare", "--net", sys.executable, str(helper_path), encoded_code]
 
         process = None
         try:
@@ -106,9 +117,7 @@ class SecureExecutor:
                 stderr=subprocess.PIPE,
                 preexec_fn=lambda: set_limits(self.max_cpu_time, self.max_memory) if sys.platform != "win32" else None,
             )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(), self.max_execution_time
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), self.max_execution_time)
 
             if process.returncode == 0:
                 return {
@@ -220,6 +229,7 @@ class SecureExecutor:
         Get list of available MCP tools that can be imported.
         """
         from mcp_coordinator.discovery import discover_tools
+
         return discover_tools()
 
 

@@ -59,18 +59,19 @@ class ConfigManager:
                 raise FileNotFoundError(f"Explicitly provided config file not found: {path}")
             return path
 
-        # 2. MCP_JSON environment variable
-        mcp_json_env = os.getenv("MCP_JSON")
+        # 2. MCP_JSON or MCP_SERVERS_CONFIG environment variable
+        mcp_json_env = os.getenv("MCP_JSON") or os.getenv("MCP_SERVERS_CONFIG")
         if mcp_json_env:
             path = Path(mcp_json_env).expanduser().resolve()
             if not path.exists():
-                raise FileNotFoundError(f"MCP_JSON environment variable points to non-existent file: {path}")
+                raise FileNotFoundError(f"Environment variable points to non-existent file: {path}")
             return path
 
-        # 3. mcp.json in project root (default)
-        default_path = self.project_root / "mcp.json"
-        if default_path.exists():
-            return default_path
+        # 3. mcp.json or mcp_servers.json in project root (default)
+        for filename in ["mcp.json", "mcp_servers.json"]:
+            default_path = self.project_root / filename
+            if default_path.exists():
+                return default_path
 
         # No configuration found
         raise FileNotFoundError(f"No MCP configuration found. Tried:\n  - MCP_JSON environment variable (not set)\n  - {default_path} (not found)\n\nPlease create mcp.json in your project root or set MCP_JSON environment variable.")

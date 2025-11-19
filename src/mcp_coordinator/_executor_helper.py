@@ -20,7 +20,7 @@ def main():
     encoded_code = sys.argv[1]
     try:
         decoded_code = base64.b64decode(encoded_code).decode("utf-8")
-        executor = LocalPythonExecutor()
+        executor = LocalPythonExecutor(additional_authorized_imports=[])
         result = executor.execute(decoded_code)
         print(result)
     except Exception as e:

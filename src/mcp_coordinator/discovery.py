@@ -12,7 +12,8 @@ Used by the generator to create Python wrapper libraries.
 
 import asyncio
 import json
-import subprocess
+import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -20,9 +21,7 @@ try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 except ImportError:
-    raise ImportError(
-        "MCP SDK is required. Install with: uv pip install mcp"
-    )
+    raise ImportError("MCP SDK is required. Install with: uv pip install mcp")
 
 
 class MCPServerConfig:
@@ -82,11 +81,19 @@ class ServerIntrospector:
         Returns:
             Dictionary with tools, resources, and prompts
         """
+        # Merge with current environment to preserve PATH, etc.
+        env = dict(os.environ)
+        if self.config.env:
+            env.update(self.config.env)
+
+        # Resolve command path
+        command = self._resolve_command(self.config.command, env.get("PATH"))
+
         # Create server parameters
         server_params = StdioServerParameters(
-            command=self.config.command,
+            command=command,
             args=self.config.args,
-            env=self.config.env,
+            env=env,
         )
 
         try:
@@ -153,6 +160,44 @@ class ServerIntrospector:
                 "prompts": {},
             }
 
+    def _resolve_command(self, command: str, path_env: str | None) -> str:
+        """
+        Resolve absolute path for a command, checking common user paths.
+        """
+
+        # 1. Try with provided PATH
+        resolved = shutil.which(command, path=path_env)
+        if resolved:
+            return resolved
+
+        # 2. Try with common user paths
+        home = Path.home()
+        common_paths = [
+            home / ".pyenv" / "shims",
+            home / ".cargo" / "bin",
+            home / ".local" / "bin",
+            Path("/usr/local/bin"),
+            Path("/usr/bin"),
+            Path("/bin"),
+        ]
+
+        # Add NVM paths if they exist
+        nvm_versions = home / ".nvm" / "versions" / "node"
+        if nvm_versions.exists():
+            for version_dir in nvm_versions.iterdir():
+                if version_dir.is_dir():
+                    common_paths.append(version_dir / "bin")
+
+        # Construct search path
+        search_path = os.pathsep.join(str(p) for p in common_paths)
+
+        resolved = shutil.which(command, path=search_path)
+        if resolved:
+            return resolved
+
+        # 3. Fallback to original command
+        return command
+
 
 class ConfigLoader:
     """Loads MCP server configurations from various sources."""
@@ -189,10 +234,7 @@ class ConfigLoader:
 
         servers = data.get("mcpServers", {})
 
-        return {
-            name: MCPServerConfig.from_dict(name, config)
-            for name, config in servers.items()
-        }
+        return {name: MCPServerConfig.from_dict(name, config) for name, config in servers.items()}
 
 
 async def discover_all_servers(
@@ -232,11 +274,7 @@ def discover_tools(config_path: str | Path) -> dict[str, list[str]]:
     """
     results = asyncio.run(discover_all_servers(config_path))
 
-    return {
-        name: list(info["tools"].keys())
-        for name, info in results.items()
-        if "error" not in info
-    }
+    return {name: list(info["tools"].keys()) for name, info in results.items() if "error" not in info}
 
 
 def get_server_details(

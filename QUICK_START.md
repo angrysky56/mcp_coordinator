@@ -58,12 +58,12 @@ Add **only this server** to your `~/.config/Claude/claude_desktop_config.json`:
       "command": "uv",
       "args": [
         "--directory",
-        "/home/ty/Repositories/ai_workspace/mcp_coordinator",
+        "/your-path-to/mcp_coordinator",
         "run",
         "mcp-coordinator-server"
       ],
       "env": {
-        "MCP_SERVERS_CONFIG": "/home/ty/Repositories/ai_workspace/mcp_coordinator/mcp_servers.json"
+        "MCP_SERVERS_CONFIG": "/your-pathto/mcp_coordinator/mcp_servers.json"
       }
     }
   }
@@ -125,7 +125,7 @@ Claude: Save this as a skill named "research_pipeline":
 def research_pipeline(topic: str, year: int = 2024):
     from mcp_tools.arxiv import search_papers
     from mcp_tools.chroma import add_documents
-    
+
     papers = search_papers(query=topic, max_results=50)
     filtered = [p for p in papers if p['year'] >= year]
     add_documents(collection="research", documents=filtered)
