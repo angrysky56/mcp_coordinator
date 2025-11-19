@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "mcp-coordinator": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/mcp_coordinator",
+        "run",
+        "mcp-coordinator-server"
+      ],
+      "env": {
+        "MCP_SERVERS_CONFIG": "/path/to/mcp_coordinator/mcp_servers.json"
+      }
+    }
+  }
+}

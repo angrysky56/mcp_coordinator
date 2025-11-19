@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+*.env
+.env/
+venv/
+ENV/
+.envrc
+*.egg-info/
+.eggs/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Linux
+*~
+
+# Logs
+*.log
+
+# Test and coverage
+.coverage
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+
+# Build
+build/
+dist/
+*.egg
+*.whl
+
+# Misc
+*.sqlite3
+*.db
+
+# Workspace
+workspace/
+
+# Docs
+/docs/_build/
+
+# Others
+*.bak
+*.swp
+
+# Ignore secrets
+secrets.env
+mcp_servers.json
