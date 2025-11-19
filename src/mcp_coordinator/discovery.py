@@ -14,6 +14,7 @@ import asyncio
 import json
 import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +87,14 @@ class ServerIntrospector:
         if self.config.env:
             env.update(self.config.env)
 
+        # Ensure standard paths are in PATH
+        current_path = env.get("PATH", "")
+        standard_paths = ["/usr/local/bin", "/usr/bin", "/bin"]
+        for p in standard_paths:
+            if p not in current_path.split(os.pathsep):
+                current_path = f"{current_path}{os.pathsep}{p}" if current_path else p
+        env["PATH"] = current_path
+
         # Resolve command path
         command = self._resolve_command(self.config.command, env.get("PATH"))
 
@@ -96,69 +105,81 @@ class ServerIntrospector:
             env=env,
         )
 
-        try:
-            async with stdio_client(server_params) as (read, write):
-                async with ClientSession(read, write) as session:
-                    # Initialize the session
-                    await session.initialize()
+        import tempfile
 
-                    # List available tools
-                    tools_result = await session.list_tools()
-                    self.tools = {
-                        tool.name: {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "input_schema": tool.inputSchema,
-                        }
-                        for tool in tools_result.tools
-                    }
+        # Create a temp file to capture stderr
+        with tempfile.TemporaryFile(mode="w+") as stderr_file:
+            try:
+                async with stdio_client(server_params, errlog=stderr_file) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        # Initialize the session
+                        await session.initialize()
 
-                    # Try to list resources (not all servers support this)
-                    try:
-                        resources_result = await session.list_resources()
-                        self.resources = {
-                            str(res.uri): {
-                                "uri": str(res.uri),
-                                "name": res.name,
-                                "description": res.description,
-                                "mime_type": res.mimeType,
+                        # List available tools
+                        tools_result = await session.list_tools()
+                        self.tools = {
+                            tool.name: {
+                                "name": tool.name,
+                                "description": tool.description,
+                                "input_schema": tool.inputSchema,
                             }
-                            for res in resources_result.resources
+                            for tool in tools_result.tools
                         }
-                    except Exception:
-                        # Resources not supported
-                        self.resources = {}
 
-                    # Try to list prompts
-                    try:
-                        prompts_result = await session.list_prompts()
-                        self.prompts = {
-                            prompt.name: {
-                                "name": prompt.name,
-                                "description": prompt.description,
-                                "arguments": prompt.arguments,
+                        # Try to list resources (not all servers support this)
+                        try:
+                            resources_result = await session.list_resources()
+                            self.resources = {
+                                str(res.uri): {
+                                    "uri": str(res.uri),
+                                    "name": res.name,
+                                    "description": res.description,
+                                    "mime_type": res.mimeType,
+                                }
+                                for res in resources_result.resources
                             }
-                            for prompt in prompts_result.prompts
-                        }
-                    except Exception:
-                        # Prompts not supported
-                        self.prompts = {}
+                        except Exception:
+                            # Resources not supported
+                            self.resources = {}
 
-            return {
-                "name": self.config.name,
-                "tools": self.tools,
-                "resources": self.resources,
-                "prompts": self.prompts,
-            }
+                        # Try to list prompts
+                        try:
+                            prompts_result = await session.list_prompts()
+                            self.prompts = {
+                                prompt.name: {
+                                    "name": prompt.name,
+                                    "description": prompt.description,
+                                    "arguments": prompt.arguments,
+                                }
+                                for prompt in prompts_result.prompts
+                            }
+                        except Exception:
+                            # Prompts not supported
+                            self.prompts = {}
 
-        except Exception as e:
-            return {
-                "name": self.config.name,
-                "error": f"Failed to connect: {e}",
-                "tools": {},
-                "resources": {},
-                "prompts": {},
-            }
+                return {
+                    "name": self.config.name,
+                    "tools": self.tools,
+                    "resources": self.resources,
+                    "prompts": self.prompts,
+                }
+
+            except Exception as e:
+                import traceback
+
+                tb = traceback.format_exc()
+
+                # Read stderr captured so far
+                stderr_file.seek(0)
+                stderr_output = stderr_file.read()
+
+                return {
+                    "name": self.config.name,
+                    "error": f"Failed to connect: {e}\nTraceback:\n{tb}\nStderr:\n{stderr_output}",
+                    "tools": {},
+                    "resources": {},
+                    "prompts": {},
+                }
 
     def _resolve_command(self, command: str, path_env: str | None) -> str:
         """
