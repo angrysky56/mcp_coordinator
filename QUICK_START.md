@@ -63,12 +63,14 @@ Add **only this server** to your `~/.config/Claude/claude_desktop_config.json`:
         "mcp-coordinator-server"
       ],
       "env": {
-        "MCP_SERVERS_CONFIG": "/your-pathto/mcp_coordinator/mcp_servers.json"
+        "MCP_SERVERS_CONFIG": "/your-path-to/mcp_coordinator/mcp_servers.json"
       }
     }
   }
 }
 ```
+
+Important- See Usage below.
 
 ### 4. Test It
 
@@ -80,7 +82,7 @@ uv run mcp-coordinator-server --help
 mcp dev mcp-coordinator-server
 ```
 
-## Usage
+## Usage- generate_tools for any new servers added to your MCP config is a crucial first step!!!
 
 Once you've added the server to Claude, you can use it like this:
 
