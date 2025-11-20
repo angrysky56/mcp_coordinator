@@ -6,9 +6,9 @@ DO NOT EDIT MANUALLY.
 
 Usage:
     from mcp_tools import list_servers
-    from mcp_tools.desktop-commander import run_command
+    from mcp_tools.chroma import query, add_documents
 """
 
 def list_servers() -> list[str]:
     """Get list of all available MCP servers."""
-    return []
+    return ['docker-mcp', 'chroma', 'arxiv-mcp-server', 'wolframalpha', 'neo4j-mcp', 'advanced-reasoning', 'fmcp', 'graph-of-thoughts', 'reflective_agent_architecture']

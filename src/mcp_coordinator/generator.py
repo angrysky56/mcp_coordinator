@@ -5,9 +5,11 @@ Creates importable Python modules from discovered MCP server capabilities.
 Implements Anthropic's "filesystem-based progressive disclosure" pattern.
 """
 
-import json
+import logging
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class ToolGenerator:
@@ -22,6 +24,18 @@ class ToolGenerator:
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _sanitize_name(self, name: str) -> str:
+        """Convert tool/server name to valid Python identifier.
+
+        Args:
+            name: Original name (may contain hyphens, etc.)
+
+        Returns:
+            Valid Python identifier
+        """
+        # Replace hyphens with underscores for Python compatibility
+        return name.replace("-", "_")
 
     def generate_tool_function(
         self,
@@ -76,14 +90,17 @@ class ToolGenerator:
         docstring = "\n".join(docstring_lines)
 
         # Generate function body
-        function_code = f'''
-async def {tool_name}({params_str}) -> Any:
+        # Sanitize tool name for Python function name
+        func_name = self._sanitize_name(tool_name)
+
+        function_code = f"""
+async def {func_name}({params_str}) -> Any:
 {docstring}
     from mcp_coordinator.runtime import call_mcp_tool
 
     # Build parameters dict, excluding None values
     params = {{}}
-'''
+"""
 
         for param_name in properties.keys():
             function_code += f'''    if {param_name} is not None:
@@ -172,17 +189,22 @@ from typing import Any
         tools = server_info.get("tools", {})
 
         if not tools:
-            module_code += f'''
+            module_code += f"""
 # No tools found for {server_name}
-'''
+"""
         else:
             for tool_name, tool_schema in tools.items():
-                tool_func = self.generate_tool_function(
-                    tool_name,
-                    tool_schema,
-                    server_name,
-                )
-                module_code += tool_func + "\n"
+                try:
+                    tool_func = self.generate_tool_function(
+                        tool_name,
+                        tool_schema,
+                        server_name,
+                    )
+                    module_code += tool_func + "\n"
+                except Exception as e:
+                    logger.warning(f"Failed to generate function for {server_name}.{tool_name}: {e}")
+                    # Continue generating other tools
+                    continue
 
             # Generate list_tools helper
             tool_names = list(tools.keys())
@@ -275,23 +297,31 @@ Each module provides:
 
         readme_path.write_text(readme_content)
 
-    def generate_all(self, servers_info: dict[str, dict[str, Any]]) -> None:
+    def generate_all(self, servers_info: dict[str, dict[str, Any]]) -> int:
         """
         Generate complete mcp_tools package.
 
         Args:
             servers_info: Dictionary of server capabilities from discovery
+
+        Returns:
+            Number of servers successfully generated
         """
         server_names = []
 
         # Generate module for each server
         for server_name, server_info in servers_info.items():
             if "error" in server_info:
-                print(f"Skipping {server_name}: {server_info['error']}")
+                logger.info(f"Skipping {server_name}: {server_info['error']}")
                 continue
 
-            self.generate_server_module(server_name, server_info)
-            server_names.append(server_name)
+            try:
+                self.generate_server_module(server_name, server_info)
+                server_names.append(server_name)
+            except Exception as e:
+                logger.error(f"Failed to generate module for {server_name}: {e}")
+                # Continue generating other servers
+                continue
 
         # Generate package index
         self.generate_index_module(server_names)
@@ -299,7 +329,8 @@ Each module provides:
         # Generate README
         self.generate_readme()
 
-        print(f"Generated {len(server_names)} server modules in {self.output_dir}")
+        logger.info(f"Generated {len(server_names)} server modules in {self.output_dir}")
+        return len(server_names)
 
 
 def generate_from_config(

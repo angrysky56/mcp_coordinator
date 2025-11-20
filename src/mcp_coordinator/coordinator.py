@@ -4,6 +4,7 @@ Main Coordinator class - the primary interface for MCP-Coordinator.
 This ties together discovery, generation, execution, and runtime.
 """
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,8 @@ from mcp_coordinator.coordinator_client import CoordinatorClient
 from mcp_coordinator.discovery import discover_all_servers
 from mcp_coordinator.executor import ExecutionEnvironment
 from mcp_coordinator.generator import ToolGenerator
+
+logger = logging.getLogger(__name__)
 
 
 class Coordinator:
@@ -41,9 +44,7 @@ class Coordinator:
             project_root: Root directory of the project (defaults to cwd)
         """
         # Initialize configuration manager
-        self.config_manager = ConfigManager(
-            Path(project_root) if project_root else None
-        )
+        self.config_manager = ConfigManager(Path(project_root) if project_root else None)
 
         # Resolve config path using priority order:
         # 1. Explicit config_path parameter
@@ -77,20 +78,46 @@ class Coordinator:
 
         return self._servers_info
 
-    async def generate_tools(self, force_refresh: bool = False) -> None:
+    async def ensure_tools_exist(self) -> bool:
+        """
+        Ensure tool wrappers exist, generating them if missing.
+
+        Returns:
+            True if tools were generated, False if they already existed
+        """
+        # Check if mcp_tools directory exists and has content
+        if not self.tools_output_dir.exists():
+            logger.info("mcp_tools directory does not exist, generating...")
+            await self.generate_tools()
+            return True
+
+        # Check if directory is empty (only __pycache__ doesn't count)
+        python_files = list(self.tools_output_dir.glob("*.py"))
+        if not python_files:
+            logger.info("mcp_tools directory is empty, generating...")
+            await self.generate_tools()
+            return True
+
+        return False
+
+    async def generate_tools(self, force_refresh: bool = False) -> int:
         """
         Generate Python wrapper libraries for all servers.
 
         Args:
             force_refresh: If True, re-discover servers first
+
+        Returns:
+            Number of servers successfully generated
         """
         # Discover servers
         servers_info = await self.discover_servers(force_refresh)
 
         # Generate wrappers
-        self.generator.generate_all(servers_info)
+        server_count = self.generator.generate_all(servers_info)
 
-        print(f"✓ Generated tool libraries in {self.tools_output_dir}")
+        logger.info(f"✓ Generated {server_count} tool libraries in {self.tools_output_dir}")
+        return server_count
 
     async def execute_code(
         self,
@@ -149,10 +176,7 @@ class Coordinator:
     async def list_servers(self) -> list[str]:
         """Get list of available server names."""
         servers_info = await self.discover_servers()
-        return [
-            name for name, info in servers_info.items()
-            if "error" not in info
-        ]
+        return [name for name, info in servers_info.items() if "error" not in info]
 
     async def list_tools(self, server_name: str) -> list[str]:
         """Get list of tools for a specific server."""
@@ -192,9 +216,7 @@ class Coordinator:
         tools = server_info.get("tools", {})
 
         if tool_name not in tools:
-            raise ValueError(
-                f"Tool '{tool_name}' not found in server '{server_name}'"
-            )
+            raise ValueError(f"Tool '{tool_name}' not found in server '{server_name}'")
 
         return tools[tool_name]
 
@@ -228,10 +250,7 @@ async def quick_coordinator(
     Returns:
         Initialized Coordinator instance
     """
-    coordinator = Coordinator(
-        config_path=config_path,
-        project_root=project_root
-    )
+    coordinator = Coordinator(config_path=config_path, project_root=project_root)
 
     if generate:
         await coordinator.generate_tools()
