@@ -23,7 +23,22 @@
     },
     "notebooklm": {
       "command": "npx",
-      "args": ["notebooklm-mcp@latest"]
+      "args": [
+        "notebooklm-mcp@latest"
+      ]
+    },
+    "desktop-commander": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@wonderwhy-er/desktop-commander@latest"
+      ]
+    },
+    "fetch": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch"
+      ]
     }
   }
 }

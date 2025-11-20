@@ -11,4 +11,4 @@ Usage:
 
 def list_servers() -> list[str]:
     """Get list of all available MCP servers."""
-    return ['docker-mcp', 'chroma', 'arxiv-mcp-server', 'wolframalpha', 'neo4j-mcp', 'advanced-reasoning', 'fmcp', 'graph-of-thoughts', 'reflective_agent_architecture']
+    return ['docker-mcp', 'chroma', 'arxiv-mcp-server', 'wolframalpha', 'neo4j-mcp', 'advanced-reasoning', 'fmcp', 'graph-of-thoughts', 'reflective_agent_architecture', 'mcp-logic', 'AstAnalyzer', 'LocalREPL', 'mcp-server-qdrant-enhanced', 'mcp-creator', 'mcp-obsidian', 'memvid_mcp_server', 'mcts-mcp-server', 'openended-philosophy', 'fetch', 'project-synapse', 'cognitive-memory-engine', 'hybrid-ai', 'coinbase-trade-assistant', 'astermind-elm']

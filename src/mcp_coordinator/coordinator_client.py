@@ -17,6 +17,7 @@ try:
 except ImportError:
     raise ImportError("MCP SDK is required. Install with: uv pip install mcp")
 
+from mcp_coordinator.config import ConfigManager
 from mcp_coordinator.discovery import ConfigLoader
 
 
@@ -35,8 +36,10 @@ class CoordinatorClient:
             config_path: Path to MCP server configuration
         """
         if config_path is None:
-            config_path = ConfigLoader.discover_claude_config()
-            if config_path is None:
+            config_manager = ConfigManager()
+            try:
+                config_path = config_manager.get_config_path()
+            except FileNotFoundError:
                 raise FileNotFoundError("Could not find MCP config. Please specify config_path.")
 
         self.config_path = Path(config_path)

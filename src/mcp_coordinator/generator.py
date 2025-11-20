@@ -169,7 +169,9 @@ async def {func_name}({params_str}) -> Any:
             server_name: Name of the server
             server_info: Server capabilities from discovery
         """
-        module_path = self.output_dir / f"{server_name}.py"
+        # Sanitize server name for filename
+        module_name = self._sanitize_name(server_name)
+        module_path = self.output_dir / f"{module_name}.py"
 
         # Start with module docstring and imports
         module_code = f'''"""

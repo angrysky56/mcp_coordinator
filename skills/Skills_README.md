@@ -33,7 +33,7 @@ async def research_and_store(topic: str, min_citations: int = 100):
     """Fetch high-impact papers and store in knowledge base."""
     from mcp_tools.arxiv import search_papers
     from mcp_tools.chroma import add_documents
-    
+
     papers = await search_papers(query=topic, max_results=50)
     filtered = [p for p in papers if p['citations'] > min_citations]
     await add_documents(collection="research", documents=filtered)
@@ -71,15 +71,15 @@ async def summarize_recent_research(
 ) -> dict[str, Any]:
     """
     Fetch and summarize recent research on a topic.
-    
+
     Args:
         topic: Research topic to search for
         days_back: How many days to look back
         output_path: Where to save detailed summary
-        
+
     Returns:
         Brief summary dict with counts and key findings
-    
+
     Example:
         >>> result = await summarize_recent_research("LLM efficiency")
         >>> print(result['paper_count'])
@@ -125,10 +125,10 @@ skills/
 ## Evolution Over Time
 
 As your agent works, this directory grows:
-- **Week 1**: Basic single-tool wrappers
-- **Month 1**: Complex multi-tool workflows
-- **Month 3**: Domain-specific orchestrations
-- **Month 6**: Full autonomous capabilities
+- **1**: Basic single-tool wrappers
+- **2**: Complex multi-tool workflows
+- **3**: Domain-specific orchestrations
+- **4**: Full autonomous capabilities
 
 ## See Also
 
