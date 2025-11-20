@@ -78,7 +78,7 @@ uv pip install mcp-coodinator
 
 See [QUICK_START.md](QUICK_START.md) for detailed instructions.
 
-## Usage Note: Ask your AI to run generate_tools for any new MCP servers added to your mcp_servers.json is a crucial first step!!! Generated tools are available in mcp_tools/ for inspection.
+## Usage Note: Ask your AI to run generate_tools for any new MCP servers added to your mcp_servers.json, this is a crucial first step!!! Generated tools are available in mcp_tools/ for inspection.
 
 
 **Advanced Usage** - Use as a Python library:
