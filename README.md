@@ -80,6 +80,7 @@ See [QUICK_START.md](QUICK_START.md) for detailed instructions.
 
 ## Usage Note: Ask your AI to run generate_tools for any new MCP servers added to your mcp_servers.json, this is a crucial first step!!! Generated tools are available in mcp_tools/ for inspection.
 
+<img width="1888" height="1048" alt="Screenshot_2025-11-19_18-34-41" src="https://github.com/user-attachments/assets/1577dc3e-60f9-4493-bf5a-b15da7d39d20" />
 
 **Advanced Usage** - Use as a Python library:
 from mcp_coordinator import Coordinator
