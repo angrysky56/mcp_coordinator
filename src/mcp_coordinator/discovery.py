@@ -290,7 +290,7 @@ async def discover_all_servers(
     config_path: str | Path,
 ) -> dict[str, dict[str, Any]]:
     """
-    Discover capabilities of all configured servers.
+    Discover capabilities of all configured servers in parallel.
 
     Args:
         config_path: Path to config file (required)
@@ -301,14 +301,46 @@ async def discover_all_servers(
     # Load configuration
     configs = ConfigLoader.load_from_json(config_path)
 
-    # Discover each server
-    results = {}
+    # Get timeouts
+    from mcp_coordinator.config import ConfigManager
 
-    for name, config in configs.items():
-        introspector = ServerIntrospector(config)
-        results[name] = await introspector.discover_tools()
+    config_manager = ConfigManager()
+    timeouts = config_manager.get_timeouts()
+    discovery_timeout = timeouts["discovery"]
 
-    return results
+    # Limit concurrency to avoid overwhelming the system
+    semaphore = asyncio.Semaphore(10)
+
+    async def _discover_one(name: str, config: MCPServerConfig) -> tuple[str, dict[str, Any]]:
+        async with semaphore:
+            try:
+                introspector = ServerIntrospector(config)
+                # Wrap individual discovery in timeout
+                result = await asyncio.wait_for(introspector.discover_tools(), timeout=discovery_timeout)
+                return name, result
+            except TimeoutError:
+                return name, {
+                    "name": name,
+                    "error": f"Discovery timed out after {discovery_timeout}s",
+                    "tools": {},
+                    "resources": {},
+                    "prompts": {},
+                }
+            except Exception as e:
+                return name, {
+                    "name": name,
+                    "error": f"Discovery failed: {str(e)}",
+                    "tools": {},
+                    "resources": {},
+                    "prompts": {},
+                }
+
+    # Launch all discoveries in parallel
+    tasks = [_discover_one(name, config) for name, config in configs.items()]
+
+    results_list = await asyncio.gather(*tasks)
+
+    return dict(results_list)
 
 
 def discover_tools(config_path: str | Path) -> dict[str, list[str]]:

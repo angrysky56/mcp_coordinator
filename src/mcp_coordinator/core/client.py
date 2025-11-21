@@ -6,18 +6,18 @@ an explicit state machine.
 """
 
 import asyncio
-import json
 import logging
 import os
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
-import aiofiles
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 from mcp.types import Tool
+
+from mcp_coordinator.config import ConfigManager
 
 from .config import McpConfig, ServerConfig
 
@@ -69,6 +69,12 @@ class McpClientManager:
         self._session_contexts: dict[str, Any] = {}
         self._read_streams: dict[str, Any] = {}
         self._write_streams: dict[str, Any] = {}
+
+        # Load timeouts
+        config_manager = ConfigManager()
+        timeouts = config_manager.get_timeouts()
+        self.connect_timeout = timeouts["connect"]
+        self.read_timeout = timeouts["read"]
 
     def _validate_state(self, required_state: ConnectionState, operation: str) -> None:
         """Validate that the manager is in the required state."""
@@ -160,57 +166,124 @@ class McpClientManager:
             await self._cleanup_server(server_name)
             raise
 
+    def _resolve_command(self, command: str, env: dict[str, str]) -> str:
+        """Resolve absolute path for a command, checking common user paths."""
+        import shutil
+
+        # 1. Try with provided PATH
+        path_env = env.get("PATH", os.environ.get("PATH", ""))
+        resolved = shutil.which(command, path=path_env)
+        if resolved:
+            return resolved
+
+        # 2. Try with common user paths
+        home = Path.home()
+        common_paths = [
+            home / ".pyenv" / "shims",
+            home / ".cargo" / "bin",
+            home / ".local" / "bin",
+            Path("/usr/local/bin"),
+            Path("/usr/bin"),
+            Path("/bin"),
+        ]
+
+        # Add NVM paths if they exist
+        nvm_versions = home / ".nvm" / "versions" / "node"
+        if nvm_versions.exists():
+            for version_dir in nvm_versions.iterdir():
+                if version_dir.is_dir():
+                    common_paths.append(version_dir / "bin")
+
+        # Construct search path
+        search_path = os.pathsep.join(str(p) for p in common_paths)
+
+        # Update env PATH to include these
+        current_path = env.get("PATH", "")
+        if current_path:
+            env["PATH"] = f"{search_path}{os.pathsep}{current_path}"
+        else:
+            env["PATH"] = search_path
+
+        resolved = shutil.which(command, path=search_path)
+        if resolved:
+            return resolved
+
+        # 3. Fallback to original command
+        return command
+
     async def _connect_stdio(self, server_name: str, config: ServerConfig) -> ClientSession:
         """Connect using stdio transport."""
         if not config.command:
             raise ValueError(f"Server {server_name} missing command")
 
+        # Prepare environment
+        env = dict(os.environ)
+        if config.env:
+            env.update(config.env)
+
+        # Resolve command and update PATH in env
+        command = self._resolve_command(config.command, env)
+
         server_params = StdioServerParameters(
-            command=config.command,
+            command=command,
             args=config.args,
-            env=config.env,
+            env=env,
         )
 
-        # Establish stdio connection and store context manager
-        stdio_ctx = stdio_client(server_params)
-        streams = await stdio_ctx.__aenter__()
-        read_stream, write_stream = streams
+        async def _connect():
+            # Establish stdio connection and store context manager
+            stdio_ctx = stdio_client(server_params)
+            streams = await stdio_ctx.__aenter__()
+            read_stream, write_stream = streams
 
-        self._stdio_contexts[server_name] = stdio_ctx
-        self._read_streams[server_name] = read_stream
-        self._write_streams[server_name] = write_stream
+            self._stdio_contexts[server_name] = stdio_ctx
+            self._read_streams[server_name] = read_stream
+            self._write_streams[server_name] = write_stream
 
-        # Create and initialize session
-        session = ClientSession(read_stream, write_stream)
-        client = await session.__aenter__()
+            # Create and initialize session
+            session = ClientSession(read_stream, write_stream)
+            client = await session.__aenter__()
 
-        self._session_contexts[server_name] = session
+            self._session_contexts[server_name] = session
 
-        await client.initialize()
-        return client
+            await client.initialize()
+            return client
+
+        # Wrap connection in timeout
+        try:
+            return await asyncio.wait_for(_connect(), timeout=self.connect_timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"Connection to {server_name} timed out after {self.connect_timeout}s")
 
     async def _connect_sse(self, server_name: str, config: ServerConfig) -> ClientSession:
         """Connect using SSE transport."""
         if not config.url:
             raise ValueError(f"Server {server_name} missing url")
 
-        # Establish SSE connection
-        sse_ctx = sse_client(url=config.url)
-        streams = await sse_ctx.__aenter__()
-        read_stream, write_stream = streams
+        async def _connect():
+            # Establish SSE connection
+            sse_ctx = sse_client(url=config.url)
+            streams = await sse_ctx.__aenter__()
+            read_stream, write_stream = streams
 
-        self._stdio_contexts[server_name] = sse_ctx
-        self._read_streams[server_name] = read_stream
-        self._write_streams[server_name] = write_stream
+            self._stdio_contexts[server_name] = sse_ctx
+            self._read_streams[server_name] = read_stream
+            self._write_streams[server_name] = write_stream
 
-        # Create and initialize session
-        session = ClientSession(read_stream, write_stream)
-        client = await session.__aenter__()
+            # Create and initialize session
+            session = ClientSession(read_stream, write_stream)
+            client = await session.__aenter__()
 
-        self._session_contexts[server_name] = session
+            self._session_contexts[server_name] = session
 
-        await client.initialize()
-        return client
+            await client.initialize()
+            return client
+
+        # Wrap connection in timeout
+        try:
+            return await asyncio.wait_for(_connect(), timeout=self.connect_timeout)
+        except TimeoutError:
+            raise TimeoutError(f"Connection to {server_name} timed out after {self.connect_timeout}s")
 
     async def _cleanup_server(self, server_name: str) -> None:
         """Clean up resources for a specific server."""
@@ -255,8 +328,11 @@ class McpClientManager:
         # Connect if needed
         session = await self._connect_to_server(server_name, server_config)
 
-        # Call tool
-        result = await session.call_tool(tool_name, arguments or {})
+        # Call tool with timeout
+        try:
+            result = await asyncio.wait_for(session.call_tool(tool_name, arguments or {}), timeout=self.read_timeout)
+        except TimeoutError:
+            raise TimeoutError(f"Tool call {tool_name} on {server_name} timed out after {self.read_timeout}s")
 
         # Unwrap result similar to reference implementation
         if hasattr(result, "content"):

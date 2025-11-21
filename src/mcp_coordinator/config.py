@@ -110,6 +110,19 @@ class ConfigManager:
             "cpu_quota": int(os.getenv("DOCKER_CPU_QUOTA", "50000")),
         }
 
+    def get_timeouts(self) -> dict[str, float]:
+        """
+        Get timeout configuration.
+
+        Returns:
+            Dictionary with timeout values in seconds
+        """
+        return {
+            "connect": float(os.getenv("MCP_CONNECT_TIMEOUT", "10.0")),
+            "read": float(os.getenv("MCP_READ_TIMEOUT", "60.0")),
+            "discovery": float(os.getenv("MCP_DISCOVERY_TIMEOUT", "30.0")),
+        }
+
 
 def create_default_env_file(project_root: Path) -> None:
     """
