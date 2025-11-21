@@ -167,8 +167,9 @@ class McpClientManager:
             raise
 
     def _resolve_command(self, command: str, env: dict[str, str]) -> str:
-        """Resolve absolute path for a command, checking common user paths."""
+        """Resolve absolute path for a command, checking common user paths in a platform-agnostic way."""
         import shutil
+        import sys
 
         # 1. Try with provided PATH
         path_env = env.get("PATH", os.environ.get("PATH", ""))
@@ -176,23 +177,44 @@ class McpClientManager:
         if resolved:
             return resolved
 
-        # 2. Try with common user paths
+        # 2. Try with common user paths based on platform
         home = Path.home()
-        common_paths = [
-            home / ".pyenv" / "shims",
-            home / ".cargo" / "bin",
-            home / ".local" / "bin",
-            Path("/usr/local/bin"),
-            Path("/usr/bin"),
-            Path("/bin"),
-        ]
+        common_paths = []
 
-        # Add NVM paths if they exist
-        nvm_versions = home / ".nvm" / "versions" / "node"
-        if nvm_versions.exists():
-            for version_dir in nvm_versions.iterdir():
-                if version_dir.is_dir():
-                    common_paths.append(version_dir / "bin")
+        if sys.platform == "win32":
+            # Windows specific paths
+            appdata = os.environ.get("APPDATA")
+            localappdata = os.environ.get("LOCALAPPDATA")
+
+            if appdata:
+                common_paths.append(Path(appdata) / "npm")  # npm global
+            if localappdata:
+                common_paths.append(Path(localappdata) / "Programs" / "Python" / "Scripts")  # Python scripts
+                common_paths.append(Path(localappdata) / "uv")  # uv
+
+            # Cargo bin is common on Windows too
+            common_paths.append(home / ".cargo" / "bin")
+
+        else:
+            # Unix-like (Linux/macOS) paths
+            common_paths.extend(
+                [
+                    home / ".pyenv" / "shims",
+                    home / ".cargo" / "bin",
+                    home / ".local" / "bin",
+                    Path("/usr/local/bin"),
+                    Path("/usr/bin"),
+                    Path("/bin"),
+                    Path("/opt/homebrew/bin"),  # macOS Homebrew
+                ]
+            )
+
+            # Add NVM paths if they exist
+            nvm_versions = home / ".nvm" / "versions" / "node"
+            if nvm_versions.exists():
+                for version_dir in nvm_versions.iterdir():
+                    if version_dir.is_dir():
+                        common_paths.append(version_dir / "bin")
 
         # Construct search path
         search_path = os.pathsep.join(str(p) for p in common_paths)
