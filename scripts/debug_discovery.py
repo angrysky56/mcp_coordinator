@@ -6,8 +6,8 @@ from pathlib import Path
 # Add src to sys.path
 sys.path.insert(0, str(Path.cwd() / "src"))
 
-from mcp_coordinator.discovery import discover_all_servers
 from mcp_coordinator.config import ConfigManager
+from mcp_coordinator.discovery import discover_all_servers
 
 
 async def main():

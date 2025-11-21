@@ -14,12 +14,12 @@ import asyncio
 import json
 import os
 import shutil
-import sys
 from pathlib import Path
 from typing import Any
 
 try:
     from mcp import ClientSession, StdioServerParameters
+    from mcp.client.sse import sse_client
     from mcp.client.stdio import stdio_client
 except ImportError:
     raise ImportError("MCP SDK is required. Install with: uv pip install mcp")
@@ -34,20 +34,23 @@ class MCPServerConfig:
         command: str,
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
+        transport_type: str = "stdio",
     ) -> None:
         """
         Initialize server configuration.
 
         Args:
             name: Server identifier
-            command: Command to launch server (e.g., 'uvx', 'python')
+            command: Command to launch server (e.g., 'uvx', 'python') or URL for SSE
             args: Command arguments
             env: Environment variables
+            transport_type: Transport type ("stdio" or "sse")
         """
         self.name = name
         self.command = command
         self.args = args or []
         self.env = env or {}
+        self.transport_type = transport_type
 
     @classmethod
     def from_dict(cls, name: str, config: dict[str, Any]) -> "MCPServerConfig":
@@ -57,6 +60,7 @@ class MCPServerConfig:
             command=config["command"],
             args=config.get("args", []),
             env=config.get("env", {}),
+            transport_type=config.get("type", "stdio"),
         )
 
 
@@ -93,25 +97,42 @@ class ServerIntrospector:
         for p in standard_paths:
             if p not in current_path.split(os.pathsep):
                 current_path = f"{current_path}{os.pathsep}{p}" if current_path else p
+
+        # Add NVM paths if they exist (fix for npx/node not found)
+        nvm_versions = Path.home() / ".nvm" / "versions" / "node"
+        if nvm_versions.exists():
+            for version_dir in nvm_versions.iterdir():
+                if version_dir.is_dir():
+                    bin_dir = version_dir / "bin"
+                    if str(bin_dir) not in current_path.split(os.pathsep):
+                        current_path = f"{bin_dir}{os.pathsep}{current_path}"
+
         env["PATH"] = current_path
-
-        # Resolve command path
-        command = self._resolve_command(self.config.command, env.get("PATH"))
-
-        # Create server parameters
-        server_params = StdioServerParameters(
-            command=command,
-            args=self.config.args,
-            env=env,
-        )
 
         import tempfile
 
-        # Create a temp file to capture stderr
-        with tempfile.TemporaryFile(mode="w+") as stderr_file:
-            try:
-                async with stdio_client(server_params, errlog=stderr_file) as (read, write):
-                    async with ClientSession(read, write) as session:
+        # Create a temp file to capture stderr (only used for stdio)
+        stderr_file = tempfile.TemporaryFile(mode="w+")
+
+        try:
+            if self.config.transport_type == "sse":
+                transport_ctx = sse_client(url=self.config.command)
+            else:
+                # Resolve command path
+                command = self._resolve_command(self.config.command, env.get("PATH"))
+
+                # Create server parameters
+                server_params = StdioServerParameters(
+                    command=command,
+                    args=self.config.args,
+                    env=env,
+                )
+                transport_ctx = stdio_client(server_params, errlog=stderr_file)
+
+            async with transport_ctx as (read, write):
+                async with ClientSession(read, write) as session:
+
+                    async def _discover():
                         # Initialize the session
                         await session.initialize()
 
@@ -157,29 +178,36 @@ class ServerIntrospector:
                             # Prompts not supported
                             self.prompts = {}
 
-                return {
-                    "name": self.config.name,
-                    "tools": self.tools,
-                    "resources": self.resources,
-                    "prompts": self.prompts,
-                }
+                    # Add timeout to prevent hanging servers from blocking discovery
+                    await asyncio.wait_for(_discover(), timeout=10.0)
 
-            except Exception as e:
-                import traceback
+            return {
+                "name": self.config.name,
+                "tools": self.tools,
+                "resources": self.resources,
+                "prompts": self.prompts,
+            }
 
-                tb = traceback.format_exc()
+        except BaseException as e:
+            import traceback
 
-                # Read stderr captured so far
+            tb = traceback.format_exc()
+
+            # Read stderr captured so far if using stdio
+            stderr_output = ""
+            if self.config.transport_type == "stdio":
                 stderr_file.seek(0)
                 stderr_output = stderr_file.read()
 
-                return {
-                    "name": self.config.name,
-                    "error": f"Failed to connect: {e}\nTraceback:\n{tb}\nStderr:\n{stderr_output}",
-                    "tools": {},
-                    "resources": {},
-                    "prompts": {},
-                }
+            return {
+                "name": self.config.name,
+                "error": f"Failed to connect: {e}\nTraceback:\n{tb}\nStderr:\n{stderr_output}",
+                "tools": {},
+                "resources": {},
+                "prompts": {},
+            }
+        finally:
+            stderr_file.close()
 
     def _resolve_command(self, command: str, path_env: str | None) -> str:
         """

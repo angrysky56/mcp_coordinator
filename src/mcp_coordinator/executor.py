@@ -178,7 +178,8 @@ class SecureExecutor:
             return await self._execute_isolated(code)
 
         try:
-            result = await asyncio.to_thread(self.executor.execute, code)
+            # LocalPythonExecutor is callable, not execute method
+            result = await asyncio.to_thread(self.executor, code)
             return {
                 "success": True,
                 "result": result,

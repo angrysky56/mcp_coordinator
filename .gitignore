@@ -1,16 +1,49 @@
 # Python
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
 *.pyc
 *.pyo
 *.pyd
-*.env
-.env/
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
 venv/
 ENV/
-.envrc
+
+# IDE
+.vscode/
+.idea/
+
+# MCP tools (auto-generated)
+mcp_tools/*.py
+!mcp_tools/__init__.py
+
+# Environment
+.env
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Temporary test outputs
+/tmp/
+/workspace/scratch/
+test_output/
+
+# OS
+.DS_Store
+Thumbs.db
+nvrc
 *.egg-info/
 .eggs/
 

@@ -22,7 +22,7 @@ class ConfigManager:
     Priority order:
     1. Explicit config_path parameter
     2. MCP_JSON environment variable
-    3. mcp.json in project root
+    3. mcp_servers.json in project root
     """
 
     def __init__(self, project_root: Path | None = None) -> None:
