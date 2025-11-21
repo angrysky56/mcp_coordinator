@@ -26,6 +26,7 @@ dependencies = [
     "rich>=13.0.0",  # Beautiful CLI output
     "python-dotenv>=1.0.0",  # Environment variable management
     "litellm>=1.50.0",  # Universal LLM API (Ollama, OpenAI, etc)
+    "aiofiles>=23.0.0",
 ]
 
 [project.optional-dependencies]

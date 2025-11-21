@@ -245,6 +245,64 @@ async def get_skill_import(name: str, version: int | None = None) -> str:
     return skills_manager.get_import_statement(name, version)
 
 
+@mcp.tool()
+async def run_skill(name: str, args: dict[str, Any] | None = None) -> Any:
+    """Execute a skill by name using the skill harness.
+
+    This runs the skill in a separate process or context, ensuring isolation.
+    It supports both database-stored skills and file-based skills in skills/.
+
+    Args:
+        name: Name of the skill to execute
+        args: Arguments to pass to the skill function
+
+    Returns:
+        Result of the skill execution
+    """
+    # We reuse the logic from skill_harness.py but call it directly if possible
+    # or spawn a subprocess if we want strict isolation.
+    # For now, let's import the harness logic and run it in-process (async)
+    # to avoid overhead, but we could switch to subprocess later.
+    # Actually, running in-process is risky if the skill calls sys.exit() or messes with global state.
+    # But execute_code runs in a sandbox (Docker/subprocess).
+    # Here we are running in the coordinator server process.
+    # Ideally we should use the executor to run the skill harness!
+
+    # Option 1: Run in-process (fast, risky)
+    # Option 2: Run via subprocess (safer)
+    # Option 3: Run via executor (safest, but requires sandbox setup)
+
+    # Let's use subprocess for now, invoking the harness we just built.
+    import json
+    import subprocess
+
+    args_json = json.dumps(args or {})
+
+    # Construct command
+    cmd = [sys.executable, "-m", "mcp_coordinator.skill_harness", name, "--args", args_json]
+
+    try:
+        process = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            error_msg = stderr.decode().strip()
+            # Try to parse error from stdout if stderr is empty (sometimes happens)
+            if not error_msg:
+                error_msg = stdout.decode().strip()
+            return {"error": f"Skill execution failed: {error_msg}"}
+
+        # Parse result from stdout
+        output = stdout.decode().strip()
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            return {"result": output}
+
+    except Exception as e:
+        return {"error": f"Failed to run skill: {str(e)}"}
+
+
 # Resources - expose information upfront without requiring tool calls
 @mcp.resource("servers://available")
 async def get_available_servers() -> str:
