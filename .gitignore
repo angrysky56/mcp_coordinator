@@ -95,3 +95,4 @@ mcp_servers.json
 
 # Created Tools
 mcp_tools/*.py
+agents/*.md

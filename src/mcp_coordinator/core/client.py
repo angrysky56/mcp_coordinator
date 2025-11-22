@@ -274,7 +274,7 @@ class McpClientManager:
         # Wrap connection in timeout
         try:
             return await asyncio.wait_for(_connect(), timeout=self.connect_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise TimeoutError(f"Connection to {server_name} timed out after {self.connect_timeout}s")
 
     async def _connect_sse(self, server_name: str, config: ServerConfig) -> ClientSession:
